@@ -1,0 +1,15 @@
+[Unit]
+Description=Run DGCOMP-says every 30 minutes
+Requires=dgcomp.service
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=30min
+# Catch up if the box was off when a tick was due.
+Persistent=true
+# Add up to 2 min of jitter so we don't hammer the EC API on the half-hour.
+RandomizedDelaySec=2min
+Unit=dgcomp.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,27 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install (lightweight test deps only — no docling/torch)
+        run: |
+          python -m pip install --upgrade pip
+          # The vocab + publish + store modules don't import docling at
+          # module load (it's lazy in sources/extract.py). So tests run
+          # without Torch on a free runner.
+          pip install pytest pytest-mock regex pydantic pydantic-settings httpx typer
+      - name: Run tests
+        run: pytest -v
+        env:
+          PYTHONPATH: src

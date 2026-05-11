@@ -1,0 +1,30 @@
+[Unit]
+Description=DGCOMP-says one-tick run (ingest + post)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=dgcomp
+Group=dgcomp
+WorkingDirectory=/home/dgcomp/DGCOMP-says
+EnvironmentFile=/home/dgcomp/DGCOMP-says/.env
+# `uv run` resolves the venv created by `uv sync` at /home/dgcomp/DGCOMP-says/.venv
+ExecStart=/home/dgcomp/.local/bin/uv run --no-sync dgcomp run
+TimeoutStartSec=15min
+Nice=10
+
+# Mild hardening — the bot only needs the working dir, the network, and /tmp.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/dgcomp/DGCOMP-says /home/dgcomp/.cache
+ProtectHome=read-only
+ProtectControlGroups=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target
