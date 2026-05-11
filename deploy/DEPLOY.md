@@ -93,8 +93,8 @@ systemctl list-timers dgcomp.timer
 journalctl -u dgcomp.service -f
 ```
 
-`OnUnitActiveSec=30min` plus `Persistent=true` means the bot fires every 30
-minutes and catches up missed ticks if the box reboots. Adjust to taste in
+`OnUnitActiveSec=2h` plus `Persistent=true` means the bot fires every two
+hours and catches up missed ticks if the box reboots. Adjust to taste in
 `/etc/systemd/system/dgcomp.timer` (and re-run `systemctl daemon-reload &&
 systemctl restart dgcomp.timer`).
 

@@ -1,9 +1,12 @@
-"""Buttondown email publisher — one HTTP call per word.
+"""Buttondown email publisher — one HTTP call per send.
 
-Buttondown's API auto-detects markdown, so the body is plain markdown.
-We send with ``status="about_to_send"`` plus the
-``X-Buttondown-Live-Dangerously`` header so the email goes out to subscribers
-immediately rather than landing as a draft.
+A "send" is one email containing one or more new words. With the cron firing
+every 2 hours, a tick that finds N words posts a single digest email; a tick
+that finds 1 word posts a single-word email; a tick that finds 0 sends nothing.
+
+Body is markdown (Buttondown auto-detects). The send is immediate, not draft —
+hence ``status="about_to_send"`` plus the ``X-Buttondown-Live-Dangerously``
+confirmation header.
 """
 
 from __future__ import annotations
@@ -41,14 +44,19 @@ class ButtondownPublisher:
         if isinstance(self.http, httpx.Client):
             self.http.close()
 
-    def post(self, entry: VocabEntry) -> bool:
-        """Send one email. Returns True on success."""
+    def post(self, entries: list[VocabEntry]) -> bool:
+        """Send one email containing every entry. Returns True on success.
+
+        Empty input is a no-op that returns True (nothing to send is success).
+        """
+        if not entries:
+            return True
         assert self.http is not None
         resp = self.http.post(
             API_URL,
             json={
-                "subject": format_subject(entry),
-                "body": format_body(entry),
+                "subject": format_subject(entries),
+                "body": format_body(entries),
                 "status": "about_to_send",
             },
             headers={
@@ -62,24 +70,26 @@ class ButtondownPublisher:
         return True
 
 
-def format_subject(entry: VocabEntry) -> str:
-    return entry.display_form
+def format_subject(entries: list[VocabEntry]) -> str:
+    """One word → just the word. Two or more → ``N new words``."""
+    if len(entries) == 1:
+        return entries[0].display_form
+    return f"{len(entries)} new words"
 
 
-def format_body(entry: VocabEntry) -> str:
-    """Render::
+def format_body(entries: list[VocabEntry]) -> str:
+    """Render each entry as a section; separate with a markdown horizontal rule."""
+    return "\n\n---\n\n".join(_format_one(e) for e in entries) + "\n"
 
-        # {display_form}
 
-        First seen in [{case_id} {case_title}]({doc_url}), {long-form date}.
-    """
+def _format_one(entry: VocabEntry) -> str:
     case_label = (
         f"{entry.case_id} {entry.case_title}" if entry.case_title else entry.case_id
     )
     return (
         f"# {entry.display_form}\n\n"
         f"First seen in [{case_label}]({entry.doc_url}), "
-        f"{_format_date(entry.first_seen_at)}.\n"
+        f"{_format_date(entry.first_seen_at)}."
     )
 
 

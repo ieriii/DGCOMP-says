@@ -179,10 +179,11 @@ def _post_entries(
         return
     publisher = ButtondownPublisher(api_key=settings.buttondown_api_key)
     try:
-        for entry in entries:
-            if publisher.post(entry):
+        if publisher.post(entries):
+            for entry in entries:
                 store.mark_posted(entry.word_lower, ["buttondown"])
-                log.info("posted: %s", entry.display_form)
+            words = ", ".join(e.display_form for e in entries)
+            log.info("posted %d word(s): %s", len(entries), words)
     finally:
         publisher.close()
 

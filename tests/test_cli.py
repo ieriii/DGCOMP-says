@@ -42,15 +42,15 @@ def _entry(word: str = "forge") -> VocabEntry:
     )
 
 
-def test_post_entries_posts_only_entries_passed_in(mocker) -> None:
-    posted: list[VocabEntry] = []
+def test_post_entries_sends_one_digest_for_a_batch(mocker) -> None:
+    sent_batches: list[list[VocabEntry]] = []
 
     class FakePublisher:
         def __init__(self, **_: object) -> None:
             pass
 
-        def post(self, entry: VocabEntry) -> bool:
-            posted.append(entry)
+        def post(self, entries: list[VocabEntry]) -> bool:
+            sent_batches.append(list(entries))
             return True
 
         def close(self) -> None:
@@ -70,7 +70,10 @@ def test_post_entries_posts_only_entries_passed_in(mocker) -> None:
         [_entry("alpha"), _entry("beta")],
     )
 
-    assert [e.word_lower for e in posted] == ["alpha", "beta"]
+    # ONE batch of two, not two separate emails.
+    assert len(sent_batches) == 1
+    assert [e.word_lower for e in sent_batches[0]] == ["alpha", "beta"]
+    # Each word still individually marked posted in the DB.
     assert store.marked == [("alpha", ["buttondown"]), ("beta", ["buttondown"])]
 
 

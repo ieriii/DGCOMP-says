@@ -1,8 +1,10 @@
 # DGCOMP-says
 
 Tracks words used for the first time by the European Commission in published
-competition decisions and sends each one as a one-word email via
-[Buttondown](https://buttondown.com).
+competition decisions and emails them via [Buttondown](https://buttondown.com).
+The bot ticks every 2 hours; ticks that find one new word send a single-word
+email, ticks that find several send a single digest, ticks that find none
+send nothing.
 
 Source: [`competition-cases.ec.europa.eu`](https://competition-cases.ec.europa.eu/search) —
 mergers, antitrust, state aid, DMA and foreign subsidies, English language only.
@@ -48,12 +50,12 @@ BUTTONDOWN_API_KEY=...
 The Buttondown API key lives at <https://buttondown.com/settings/programming>.
 Subscribers, signup page, double-opt-in, unsubscribe links, GDPR data
 requests, and deliverability are all handled by Buttondown — the bot just
-calls `POST /v1/emails` once per new word.
+calls `POST /v1/emails` once per non-empty tick.
 
 ## Hosting
 
 - **Backfill**: run once with `uv run dgcomp backfill`.
 - **Live cron**: a Hostinger VPS (KVM 2, Ubuntu 24.04) runs `uv run dgcomp run`
-  every 30 min via `systemd.timer`. Provisioning runbook + units are in
+  every 2 hours via `systemd.timer`. Provisioning runbook + units are in
   [`deploy/DEPLOY.md`](deploy/DEPLOY.md); `deploy/bootstrap.sh` is idempotent
   and provider-agnostic (any Ubuntu 24.04 host with root SSH will do).
