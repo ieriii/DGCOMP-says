@@ -30,6 +30,13 @@ DEFAULT_INSTRUMENTS = [
     InstrumentType.FOREIGN_SUBSIDIES,
 ]
 
+# EC publishes decisions to its search index with a lag (typically hours,
+# sometimes days). A run-window of "today only" therefore misses decisions
+# adopted recently but indexed after their adoption date. We look back
+# RUN_LOOKBACK_DAYS on every tick; ingest_one() dedupes via
+# source_documents.doc_id, so re-querying past days is idempotent and cheap.
+RUN_LOOKBACK_DAYS = 7
+
 
 def _setup_logging(verbose: bool) -> None:
     logging.basicConfig(
@@ -60,21 +67,31 @@ def run(
     verbose: bool = typer.Option(False, "--verbose", "-v"),
     skip_post: bool = typer.Option(False, "--skip-post", help="Don't post (dry run)"),
 ) -> None:
-    """One daily tick: ingest today's decisions and post new words."""
+    """One tick of the live cron: ingest the last RUN_LOOKBACK_DAYS of
+    decisions (to absorb EC search-index publishing lag) and post any new
+    words. Already-ingested documents are skipped via source_documents.doc_id,
+    so the widened window is idempotent and only costs a handful of extra
+    search-API calls per tick.
+    """
     _setup_logging(verbose)
     settings = Settings()
 
     today = date.today()
+    date_from = today - timedelta(days=RUN_LOOKBACK_DAYS)
+    date_to = _exclusive_until(today)
 
     with VocabStore(settings.db_path) as store:
         inserted = _ingest(
             settings,
             store,
-            date_from=today,
-            date_to=_exclusive_until(today),
+            date_from=date_from,
+            date_to=date_to,
             instruments=DEFAULT_INSTRUMENTS,
         )
-        log.info("ingested %d new words", len(inserted))
+        log.info(
+            "ingested %d new words (window %s..%s)",
+            len(inserted), date_from, date_to,
+        )
 
         if not skip_post:
             _post_entries(settings, store, inserted)
