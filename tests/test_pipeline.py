@@ -49,7 +49,10 @@ def _meta() -> DocumentMeta:
 
 
 def test_inserts_new_words_and_returns_them(store: VocabStore) -> None:
-    text = "The Commission opened an antitrust investigation. The Parties cooperated."
+    text = (
+        "The Commission opened an antitrust investigation. The Parties cooperated. "
+        "the commission also noted that the parties cooperated fully."
+    )
     fake = FakeAnthropic()
     v = Validator(store=store, client=fake, model="haiku")
 
@@ -67,7 +70,7 @@ def test_skips_words_already_in_vocab(store: VocabStore) -> None:
         meta=_meta(), store=store, validator=v,
     )
     process_document(
-        text="Another antitrust investigation followed.",
+        text="Another antitrust investigation followed. another concern arose.",
         meta=_meta(), store=store, validator=v,
     )
     words = {e.word_lower for e in store.recent_words()}
@@ -108,6 +111,59 @@ def test_filtering_happens_before_llm(store: VocabStore) -> None:
     process_document(text=text, meta=_meta(), store=store, validator=v)
     # AAAA / BBB rejected by shape; only "cooperation" reaches the LLM.
     assert fake.calls == 1
+
+
+def test_drops_proper_noun_with_single_capitalised_occurrence(
+    store: VocabStore,
+) -> None:
+    """A name that appears once, mid-sentence, capitalised, in an address
+    footer is dropped without consulting the LLM."""
+    text = (
+        "The Commission approved the merger. "
+        "The notifying party has its registered office in Nijverdal."
+    )
+    fake = FakeAnthropic()
+    v = Validator(store=store, client=fake, model="haiku")
+
+    process_document(text=text, meta=_meta(), store=store, validator=v)
+    words = {e.word_lower for e in store.recent_words()}
+    assert "nijverdal" not in words
+
+
+def test_drops_proper_noun_with_many_capitalised_occurrences(
+    store: VocabStore,
+) -> None:
+    """A party name that recurs many times but is always capitalised is still
+    a proper noun and still dropped."""
+    text = (
+        "Bremner notified the transaction. Bremner is incorporated in the UK. "
+        "The Commission reviewed Bremner's submissions and Bremner's market data."
+    )
+    fake = FakeAnthropic()
+    v = Validator(store=store, client=fake, model="haiku")
+
+    process_document(text=text, meta=_meta(), store=store, validator=v)
+    words = {e.word_lower for e in store.recent_words()}
+    assert "bremner" not in words
+
+
+def test_keeps_word_capitalised_at_sentence_start_but_lowercase_elsewhere(
+    store: VocabStore,
+) -> None:
+    """A real English novelty that happens to debut at sentence-start (and
+    thus appears capitalised once) is kept as long as it also appears
+    lowercase somewhere in the document body."""
+    text = (
+        "Decarbonisation of the steel sector is at stake. "
+        "The Commission noted that decarbonisation requires investment, and "
+        "that further decarbonisation depends on access to green hydrogen."
+    )
+    fake = FakeAnthropic()
+    v = Validator(store=store, client=fake, model="haiku")
+
+    process_document(text=text, meta=_meta(), store=store, validator=v)
+    words = {e.word_lower for e in store.recent_words()}
+    assert "decarbonisation" in words
 
 
 def test_chunks_above_chunk_size(store: VocabStore) -> None:

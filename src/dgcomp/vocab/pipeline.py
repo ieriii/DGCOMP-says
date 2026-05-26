@@ -74,7 +74,19 @@ def _candidates(
 ) -> Iterator[tuple[str, str, str]]:
     """Yield (display_form, word_lower, sentence) for first-occurrence
     candidates that survive the shape filter and aren't yet in vocab.
+
+    Proper-noun heuristic: EC decision headers leak party names, addresses,
+    and signatories ("Nijverdal", "Ceelen", "Bremner", …) into the pipeline.
+    These tokens are uppercase-initial in every occurrence throughout the
+    document. Real English novelties — even those debuting at sentence-start
+    — almost always appear lowercase somewhere else in the body. So we drop
+    any candidate whose every occurrence in the doc is uppercase-initial.
+    Zero LLM cost; validator cache untouched.
     """
+    occurrences: dict[str, list[str]] = {}
+    for tok in tokenise(text):
+        occurrences.setdefault(tok.lower(), []).append(tok)
+
     seen: set[str] = set()
     for sentence in segment(text):
         for token in tokenise(sentence):
@@ -83,4 +95,7 @@ def _candidates(
                 seen.add(wl)
                 continue
             seen.add(wl)
+            if all(t[0].isupper() for t in occurrences[wl]):
+                logger.debug("dropped proper noun: %s", token)
+                continue
             yield token, wl, sentence
