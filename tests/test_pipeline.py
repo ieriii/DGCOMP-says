@@ -166,6 +166,36 @@ def test_keeps_word_capitalised_at_sentence_start_but_lowercase_elsewhere(
     assert "decarbonisation" in words
 
 
+def test_drops_proper_noun_unmasked_only_by_a_footnote_url(
+    store: VocabStore,
+) -> None:
+    """Regression for the 'Aspex' incident (case M.11936).
+
+    The fund name 'Aspex' is capitalised in the body, so the proper-noun filter
+    should drop it. But a footnote cited a press-release URL whose slug embedded
+    the name lowercased ('…to-aspex-management'), which previously planted a
+    lowercase occurrence and tricked the filter into keeping it. URLs are now
+    stripped before tokenisation, so the name is dropped and the LLM (which is
+    instructed to keep names) is never consulted for it.
+    """
+    text = (
+        "The Commission approved the merger. "
+        "In fact, the seller has already sold a stake to Aspex. "
+        "(3) Press Release, available here: "
+        "https://www.prosus.com/news-\n"
+        "insights/2026/prosus-sells-5-percent-interest-in-delivery-hero-to-aspex-management."
+    )
+    fake = FakeAnthropic()
+    v = Validator(store=store, client=fake, model="haiku")
+
+    inserted = process_document(text=text, meta=_meta(), store=store, validator=v)
+    words = {e.word_lower for e in inserted}
+    assert "aspex" not in words
+    # URL-slug fragments must not leak in either.
+    for junk in ("insights", "interest", "management", "percent"):
+        assert junk not in words
+
+
 def test_chunks_above_chunk_size(store: VocabStore) -> None:
     words = [
         "antitrust", "concertation", "tying", "foreclosure", "merger",

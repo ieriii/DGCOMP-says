@@ -8,7 +8,9 @@ import httpx
 
 from dgcomp.publish.buttondown import (
     API_URL,
+    CASE_BASE,
     ButtondownPublisher,
+    case_link,
     format_body,
     format_subject,
 )
@@ -40,13 +42,45 @@ def test_single_subject_is_just_the_word() -> None:
 def test_single_body_has_word_as_heading_and_one_line_source() -> None:
     body = format_body([_entry()])
     assert body.startswith("# Forging\n\n")
+    # Subscriber link points at the stable case page, NOT the volatile PDF
+    # attachment URL the word was extracted from (which rots — see case_link).
     assert (
         "First seen in [M.10847 ALPHA / BRAVO]"
-        "(https://ec.europa.eu/competition/mergers/cases1/202615/M_10847_98.pdf), "
+        "(https://competition-cases.ec.europa.eu/cases/M.10847), "
         "12 April 2026."
     ) in body
+    # The rot-prone attachment URL never reaches subscribers.
+    assert "cases1/202615" not in body
     # No separator when there's only one entry.
     assert "---" not in body
+
+
+def test_link_uses_stable_case_page_regardless_of_doc_url() -> None:
+    # Even with a now-dead legacy attachment URL stored, the email links to the
+    # stable per-case page derived from the case id.
+    body = format_body(
+        [
+            _entry(
+                case_id="M.11936",
+                case_title="NASPERS / JUST EAT TAKEAWAY",
+                doc_url="https://ec.europa.eu/competition/mergers/cases1/202623/M_11936_1710.pdf",
+            )
+        ]
+    )
+    assert "(https://competition-cases.ec.europa.eu/cases/M.11936)" in body
+    assert "ec.europa.eu/competition" not in body
+
+
+def test_case_link_falls_back_for_malformed_case_id() -> None:
+    assert case_link("M.11936", "fallback") == (
+        "https://competition-cases.ec.europa.eu/cases/M.11936"
+    )
+    # Each instrument prefix is recognised.
+    for cid in ("AT.40000", "SA.15796", "DMA.100018", "FS.100011"):
+        assert case_link(cid, "fallback") == f"{CASE_BASE}/{cid}"
+    # Unrecognised id → keep whatever provenance URL we had.
+    assert case_link("", "fallback") == "fallback"
+    assert case_link("garbage", "fallback") == "fallback"
 
 
 def test_body_falls_back_to_case_id_when_title_missing() -> None:

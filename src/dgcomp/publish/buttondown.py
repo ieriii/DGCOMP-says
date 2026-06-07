@@ -17,12 +17,27 @@ from datetime import date
 from typing import Protocol
 
 import httpx
+import regex
 
 from dgcomp.vocab.store import VocabEntry
 
 logger = logging.getLogger(__name__)
 
 API_URL = "https://api.buttondown.com/v1/emails"
+
+# Subscriber-facing link. The PDF attachment URLs the bot ingests from
+# (ec.europa.eu/competition/.../cases1/<n>/<case>_<rev>.pdf) are versioned and
+# rot: the EC re-publishes a decision under a new <rev> and the old path
+# silently redirects to a generic landing page. The per-case page on the live
+# host is stable across re-publications and never redirects, so that is what we
+# link to. ``doc_url`` is retained in the DB purely as extraction provenance.
+CASE_BASE = "https://competition-cases.ec.europa.eu/cases"
+_CASE_ID_RE = regex.compile(r"^(?:AT|M|SA|DMA|FS)\.\w+$")
+
+
+def case_link(case_id: str, fallback: str) -> str:
+    """Stable case-page URL for a well-formed case id; ``fallback`` otherwise."""
+    return f"{CASE_BASE}/{case_id}" if _CASE_ID_RE.match(case_id) else fallback
 
 
 class _Poster(Protocol):
@@ -86,9 +101,10 @@ def _format_one(entry: VocabEntry) -> str:
     case_label = (
         f"{entry.case_id} {entry.case_title}" if entry.case_title else entry.case_id
     )
+    link = case_link(entry.case_id, entry.doc_url)
     return (
         f"# {entry.display_form}\n\n"
-        f"First seen in [{case_label}]({entry.doc_url}), "
+        f"First seen in [{case_label}]({link}), "
         f"{_format_date(entry.first_seen_at)}."
     )
 

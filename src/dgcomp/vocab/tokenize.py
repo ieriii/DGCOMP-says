@@ -34,6 +34,15 @@ _MD_STRIP = regex.compile(r"[#*_`>\[\]]")
 # PDF hyphenation: "competit-\nion" → "competition" (only when next line is lowercase).
 _HYPH_LINEBREAK = regex.compile(r"(\p{Ll})-\n(\p{Ll})")
 
+# URLs and email addresses. EU decisions cite press releases and registries in
+# footnotes; their path slugs ("…/prosus-sells-…-to-aspex-management") would
+# otherwise leak as vocabulary *and*, worse, plant a lowercase occurrence of a
+# party name that defeats the proper-noun filter in vocab/pipeline.py. We drop
+# them wholesale before tokenisation. Applied *after* collapse_hyphenation so a
+# URL broken across a line ("…/news-\ninsights/…") is stitched first.
+_URL_RE = regex.compile(r"(?:https?://|www\.)\S+", regex.IGNORECASE)
+_EMAIL_RE = regex.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+", regex.IGNORECASE)
+
 
 def normalise(text: str) -> str:
     """Apply Unicode NFKC, fold curly quotes/dashes, strip markdown punctuation."""
@@ -48,6 +57,26 @@ def collapse_hyphenation(text: str) -> str:
     return _HYPH_LINEBREAK.sub(r"\1\2", text)
 
 
+def strip_urls(text: str) -> str:
+    """Replace URLs and email addresses with a space.
+
+    Footnote URLs are not prose: their slugs are not real vocabulary, and a
+    lowercased party name inside one ("…to-aspex-management") would otherwise
+    sneak a proper noun past the all-occurrences-capitalised filter.
+    """
+    text = _URL_RE.sub(" ", text)
+    return _EMAIL_RE.sub(" ", text)
+
+
+def clean(text: str) -> str:
+    """Full pre-tokenisation cleanup: normalise → stitch hyphenation → drop URLs.
+
+    URL stripping runs last so a URL split across a line break is rejoined by
+    ``collapse_hyphenation`` first and then removed in one piece.
+    """
+    return strip_urls(collapse_hyphenation(normalise(text)))
+
+
 def tokenise(text: str) -> list[str]:
     """Return word tokens preserving original case.
 
@@ -55,5 +84,4 @@ def tokenise(text: str) -> list[str]:
     ``"competit-\\nion"`` yields ``["competit", "ion"]`` instead of
     ``["competition"]``.
     """
-    text = collapse_hyphenation(normalise(text))
-    return [m.group(0) for m in _WORD_RE.finditer(text)]
+    return [m.group(0) for m in _WORD_RE.finditer(clean(text))]

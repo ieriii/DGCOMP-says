@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from dgcomp.vocab.tokenize import collapse_hyphenation, normalise, tokenise
+from dgcomp.vocab.tokenize import (
+    collapse_hyphenation,
+    normalise,
+    strip_urls,
+    tokenise,
+)
 
 
 def test_returns_words_not_characters() -> None:
@@ -88,3 +93,37 @@ def test_dictionary_pollution_examples_caught() -> None:
     # CJK characters: \p{L} matches them, so they survive tokenisation;
     # downstream filter excludes them via the ASCII-letter shape check.
     assert tokenise("东山白卢") == ["东山白卢"]
+
+
+# --- URL / email stripping ---
+
+
+def test_strip_urls_removes_links_and_emails() -> None:
+    assert strip_urls("see https://example.com/foo-bar here") == "see   here"
+    assert strip_urls("visit www.example.com/x now") == "visit   now"
+    assert strip_urls("mail to john.doe@example.eu please") == "mail to   please"
+
+
+def test_url_slug_does_not_leak_into_tokens() -> None:
+    text = "Prosus’ press release, available here: https://www.prosus.com/news/foo-bar-baz."
+    tokens = tokenise(text)
+    assert tokens == ["Prosus", "press", "release", "available", "here"]
+    for junk in ("foo", "bar", "baz", "prosus.com", "https"):
+        assert junk not in tokens
+
+
+def test_url_split_across_a_line_break_is_still_stripped() -> None:
+    """The real M.11936 footnote: a press-release URL hyphen-broken across a
+    line. Its slug embeds a lowercase party name ('…to-aspex-management') which
+    must NOT survive as a token, or it unmasks the proper noun 'Aspex'."""
+    text = (
+        "sold a stake to Aspex. (3) Prosus’ Press Release, available here: "
+        "https://www.prosus.com/news-\n"
+        "insights/2026/prosus-sells-5-percent-interest-in-delivery-hero-to-aspex-management."
+    )
+    tokens = tokenise(text)
+    # The lowercase slug occurrence ('…to-aspex-management') must be gone; only
+    # the capitalised body mention survives. (If the slug leaked, the lowercase
+    # 'aspex' would unmask the proper noun in the pipeline's occurrence map.)
+    assert "aspex" not in tokens
+    assert tokens.count("Aspex") == 1

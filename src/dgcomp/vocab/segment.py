@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import regex
 
-from dgcomp.vocab.tokenize import collapse_hyphenation, normalise
+from dgcomp.vocab.tokenize import clean
 
 _SENTENCE_RE = regex.compile(r"(?<=[.!?])\s+(?=\p{Lu})")
 _WHITESPACE_RUN = regex.compile(r"\s+")
@@ -22,6 +22,6 @@ _WHITESPACE_RUN = regex.compile(r"\s+")
 
 def segment(text: str) -> list[str]:
     """Return cleaned sentences from raw extraction output."""
-    text = collapse_hyphenation(normalise(text))
+    text = clean(text)
     sentences = _SENTENCE_RE.split(text)
     return [_WHITESPACE_RUN.sub(" ", s).strip() for s in sentences if s.strip()]
