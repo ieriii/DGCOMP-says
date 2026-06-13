@@ -31,3 +31,10 @@ class Settings(BaseSettings):
     db_path: Path = Field(default=_REPO_ROOT / "data" / "vocab.sqlite")
 
     posting_cutoff_date: str = ""  # ISO date; only words ≥ this date are posted
+
+    # Comma-separated instrument codes (AT|M|SA|DMA|FS) whose first-seen words
+    # are ingested for dedup but never emailed. State aid is the highest-volume
+    # instrument and least relevant to most competition readers, so it's
+    # suppressed from the digest by default while still anchoring the
+    # "first ever used by the Commission" guarantee.
+    post_exclude_instruments: str = "SA"

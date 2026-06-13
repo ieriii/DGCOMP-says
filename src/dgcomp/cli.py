@@ -94,7 +94,14 @@ def run(
         )
 
         if not skip_post:
-            _post_entries(settings, store, inserted)
+            postable = _postable(inserted, _excluded_instruments(settings))
+            suppressed = len(inserted) - len(postable)
+            if suppressed:
+                log.info(
+                    "suppressed %d word(s) from excluded instruments (%s)",
+                    suppressed, settings.post_exclude_instruments,
+                )
+            _post_entries(settings, store, postable)
 
 
 @app.command()
@@ -182,6 +189,27 @@ def _ingest(
 
 def _exclusive_until(day: date) -> date:
     return day + timedelta(days=1)
+
+
+def _excluded_instruments(settings: Settings) -> frozenset[str]:
+    """Parse the comma-separated ``post_exclude_instruments`` setting into a set
+    of upper-cased instrument codes (e.g. ``{"SA"}``)."""
+    return frozenset(
+        code.strip().upper()
+        for code in settings.post_exclude_instruments.split(",")
+        if code.strip()
+    )
+
+
+def _postable(
+    entries: list[VocabEntry], excluded: frozenset[str]
+) -> list[VocabEntry]:
+    """Drop entries whose first-seen instrument is excluded from the digest.
+
+    Suppressed entries stay in the vocab DB (unposted) so they still anchor the
+    global first-seen dedup; they're simply never emailed.
+    """
+    return [e for e in entries if e.case_type.upper() not in excluded]
 
 
 def _instruments(instrument: str) -> list[InstrumentType]:

@@ -5,7 +5,14 @@ from __future__ import annotations
 from datetime import date
 from types import SimpleNamespace
 
-from dgcomp.cli import DEFAULT_INSTRUMENTS, _exclusive_until, _instruments, _post_entries
+from dgcomp.cli import (
+    DEFAULT_INSTRUMENTS,
+    _excluded_instruments,
+    _exclusive_until,
+    _instruments,
+    _post_entries,
+    _postable,
+)
 from dgcomp.sources.client import InstrumentType
 from dgcomp.vocab.store import VocabEntry
 
@@ -29,17 +36,44 @@ def test_cli_until_dates_are_inclusive() -> None:
     assert _exclusive_until(date(2026, 4, 29)) == date(2026, 4, 30)
 
 
-def _entry(word: str = "forge") -> VocabEntry:
+def _entry(word: str = "forge", case_type: str = "M") -> VocabEntry:
     return VocabEntry(
         word_lower=word,
         display_form=word.title(),
         first_seen_at="2026-04-30",
-        case_id="M.1",
-        case_type="M",
+        case_id=f"{case_type}.1",
+        case_type=case_type,
         case_title="A / B",
         doc_url="https://example.test/doc.pdf",
         sentence="A sentence.",
     )
+
+
+def test_excluded_instruments_parses_csv() -> None:
+    assert _excluded_instruments(SimpleNamespace(post_exclude_instruments="SA")) == {
+        "SA"
+    }
+    assert _excluded_instruments(
+        SimpleNamespace(post_exclude_instruments=" sa , dma ")
+    ) == {"SA", "DMA"}
+    assert (
+        _excluded_instruments(SimpleNamespace(post_exclude_instruments="")) == frozenset()
+    )
+
+
+def test_postable_drops_excluded_instruments() -> None:
+    entries = [
+        _entry("aid", case_type="SA"),
+        _entry("merger", case_type="M"),
+        _entry("gatekeeper", case_type="DMA"),
+    ]
+    kept = _postable(entries, frozenset({"SA"}))
+    assert [e.word_lower for e in kept] == ["merger", "gatekeeper"]
+
+
+def test_postable_with_no_exclusions_keeps_everything() -> None:
+    entries = [_entry("aid", case_type="SA"), _entry("merger", case_type="M")]
+    assert _postable(entries, frozenset()) == entries
 
 
 def test_post_entries_sends_one_digest_for_a_batch(mocker) -> None:
